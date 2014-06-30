@@ -306,14 +306,14 @@
 		filter: [ 'width', 'items', 'settings' ],
 		run: function() {
 			var rtl = (this.settings.rtl ? 1 : -1),
-				width = (this.width() / this.settings.items).toFixed(3),
+				width = (100 / this.settings.items).toFixed(3),
 				coordinate = 0, merge, i, n;
 
 			this._coordinates = [];
 			for (i = 0, n = this._clones.length + this._items.length; i < n; i++) {
 				merge = this._mergers[this.relative(i)];
 				merge = (this.settings.mergeFit && Math.min(merge, this.settings.items)) || merge;
-				coordinate += (this.settings.autoWidth ? this._items[this.relative(i)].width() + this.settings.margin : width * merge) * rtl;
+				coordinate += (this.settings.autoWidth ? this._items[this.relative(i)].width() + this.settings.margin : (100 / n) * merge) * rtl;
 
 				this._coordinates.push(coordinate);
 			}
@@ -321,15 +321,22 @@
 	}, {
 		filter: [ 'width', 'items', 'settings' ],
 		run: function() {
-			var i, n, width = (this.width() / this.settings.items).toFixed(3), css = {
-				'width': Math.abs(this._coordinates[this._coordinates.length - 1]) + this.settings.stagePadding * 2,
+			var i, j, n, width = (this.width() / this.settings.items).toFixed(3), stageWidthPercent = 0, css;
+
+			for (j = 0; j < this._clones.length + this._items.length; j++ ){
+				stageWidthPercent += (100 / this.settings.items);
+			}
+
+			css = {
+				'width': stageWidthPercent.toFixed(3) + '%',//Math.abs(this._coordinates[this._coordinates.length - 1]) + this.settings.stagePadding * 2,
 				'padding-left': this.settings.stagePadding || '',
 				'padding-right': this.settings.stagePadding || ''
 			};
 
 			this.$stage.css(css);
 
-			css = { 'width': this.settings.autoWidth ? 'auto' : width - this.settings.margin };
+			//css = { 'width': this.settings.autoWidth ? 'auto' : width - this.settings.margin };
+			css = { 'width': 100 / parseInt(this._clones.length + this._items.length) + '%' };
 			css[this.settings.rtl ? 'margin-left' : 'margin-right'] = this.settings.margin;
 
 			if (!this.settings.autoWidth && $.grep(this._mergers, function(v) { return v > 1 }).length > 0) {
@@ -730,6 +737,7 @@
 		// get stage position left
 		this.drag.offsetX = this.$stage.position().left;
 		this.drag.offsetY = this.$stage.position().top;
+		this.drag.stageWidth = this.$stage.width() / 100;
 
 		if (this.settings.rtl) {
 			this.drag.offsetX = this.$stage.position().left + this.$stage.width() - this.width()
@@ -738,8 +746,7 @@
 
 		// catch position // ie to fix
 		if (this.state.inMotion && this.support3d) {
-			animatedPos = this.getTransformProperty();
-			this.drag.offsetX = animatedPos;
+			animatedPos = this.drag.offsetX = this.getTransformProperty() / this.drag.stageWidth;
 			this.animate(animatedPos);
 			this.state.inMotion = true;
 		} else if (this.state.inMotion && !this.support3d) {
@@ -788,7 +795,8 @@
 		// Drag Direction
 		this.drag.currentX = pageX - this.drag.startX;
 		this.drag.currentY = pageY - this.drag.startY;
-		this.drag.distance = this.drag.currentX - this.drag.offsetX;
+		this.drag.distance = (this.drag.currentX - this.drag.offsetX) / this.drag.stageWidth;
+		this.drag.updatedX = this.drag.currentX / this.drag.stageWidth;
 
 		// Check move direction
 		if (this.drag.distance < 0) {
@@ -798,17 +806,17 @@
 		}
 		// Loop
 		if (this.settings.loop) {
-			if (this.op(this.drag.currentX, '>', this.coordinates(this.minimum())) && this.state.direction === 'right') {
-				this.drag.currentX -= (this.settings.center && this.coordinates(0)) - this.coordinates(this._items.length);
-			} else if (this.op(this.drag.currentX, '<', this.coordinates(this.maximum())) && this.state.direction === 'left') {
-				this.drag.currentX += (this.settings.center && this.coordinates(0)) - this.coordinates(this._items.length);
+			if (this.op(this.drag.updatedX, '>', this.coordinates(this.minimum())) && this.state.direction === 'right') {
+				this.drag.updatedX -= (this.settings.center && this.coordinates(0)) - this.coordinates(this._items.length);
+			} else if (this.op(this.drag.updatedX, '<', this.coordinates(this.maximum())) && this.state.direction === 'left') {
+				this.drag.updatedX += (this.settings.center && this.coordinates(0)) - this.coordinates(this._items.length);
 			}
 		} else {
 			// pull
 			minValue = this.settings.rtl ? this.coordinates(this.maximum()) : this.coordinates(this.minimum());
 			maxValue = this.settings.rtl ? this.coordinates(this.minimum()) : this.coordinates(this.maximum());
 			pull = this.settings.pullDrag ? this.drag.distance / 5 : 0;
-			this.drag.currentX = Math.max(Math.min(this.drag.currentX, minValue + pull), maxValue + pull);
+			this.drag.updatedX = Math.max(Math.min(this.drag.updatedX, minValue + pull), maxValue + pull);
 		}
 
 		// Lock browser if swiping horizontal
@@ -821,8 +829,6 @@
 			}
 			this.state.isSwiping = true;
 		}
-
-		this.drag.updatedX = this.drag.currentX;
 
 		// Lock Owl if scrolling
 		if ((this.drag.currentY > 16 || this.drag.currentY < -16) && this.state.isSwiping === false) {
@@ -949,7 +955,7 @@
 	 * @return {Number} - The absolute position of the closest item.
 	 */
 	Owl.prototype.closest = function(coordinate) {
-		var position = -1, pull = 30, width = this.width(), coordinates = this.coordinates();
+		var position = -1, pull = 0.62, width = 100, coordinates = this.coordinates();
 
 		if (!this.settings.freeDrag) {
 			// check closest item
@@ -987,12 +993,12 @@
 
 		if (this.support3d) {
 			this.$stage.css({
-				transform: 'translate3d(' + coordinate + 'px' + ',0px, 0px)',
+				transform: 'translate3d(' + coordinate + '%' + ',0, 0)',
 				transition: (this.speed() / 1000) + 's'
 			});
 		} else if (this.state.isTouch) {
 			this.$stage.css({
-				left: coordinate + 'px'
+				left: coordinate + '%'
 			});
 		} else {
 			this.$stage.animate({
